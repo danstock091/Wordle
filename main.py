@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import messagebox
 from string import ascii_letters
 
+
 class WordList:
     def __init__(self, filepath):
         self.filepath = filepath
@@ -11,6 +12,8 @@ class WordList:
 
     def load_words(self):
         wordlist_path = pathlib.Path(self.filepath)
+        if not wordlist_path.is_file():
+            raise FileNotFoundError(f"Wordlist file '{self.filepath}' not found.")
         return [
             word.upper()
             for word in wordlist_path.read_text(encoding="utf-8").split("\n")
@@ -20,15 +23,16 @@ class WordList:
     def get_random_word(self):
         return random.choice(self.words)
 
+
 class WyrdlGame(tk.Tk):
     def __init__(self, wordlist_path):
         super().__init__()
 
         self.title("Wyrdl Game")
-        self.geometry("600x800")  # Set window size to be larger
+        self.geometry("600x800")
         self.word_list = WordList(wordlist_path)
         self.word = self.word_list.get_random_word()
-        self.max_attempts = 5  # Set maximum attempts to 5
+        self.max_attempts = 5
         self.guess_num = 1
 
         self.create_widgets()
@@ -61,13 +65,13 @@ class WyrdlGame(tk.Tk):
 
         self.alphabet_labels = {}
         for i, letter in enumerate(ascii_letters[:26]):
-            label = tk.Label(self.alphabet_frame, text=letter, font=("Helvetica", 14), width=2)
+            label = tk.Label(self.alphabet_frame, text=letter.upper(), font=("Helvetica", 14), width=2)
             label.grid(row=0, column=i)
-            self.alphabet_labels[letter] = label
+            self.alphabet_labels[letter.lower()] = label
 
     def process_guess(self, event):
         guess = self.guess_entry.get().upper()
-        if len(guess) != 5 or not all(letter in ascii_letters for letter in guess):
+        if len(guess) != 5 or not all(letter in ascii_letters.upper() for letter in guess):
             messagebox.showerror("Invalid Guess", "Please enter a valid 5-letter word.")
             return
 
@@ -87,22 +91,40 @@ class WyrdlGame(tk.Tk):
             self.game_over()
 
     def evaluate_guess(self, guess):
-        correct_letters = {
-            letter for letter, correct in zip(guess, self.word) if letter == correct
-        }
-        misplaced_letters = set(guess) & set(self.word) - correct_letters
-        wrong_letters = set(guess) - set(self.word)
+        correct_letters = []
+        misplaced_letters = []
+        wrong_letters = []
+
+        word_letter_count = {letter: self.word.count(letter) for letter in set(self.word)}
+
+        # First pass: Identify correct letters
+        for i, letter in enumerate(guess):
+            if letter == self.word[i]:
+                correct_letters.append((letter, i))
+                word_letter_count[letter] -= 1
+
+        # Second pass: Identify misplaced and wrong letters
+        for i, letter in enumerate(guess):
+            if (letter, i) not in correct_letters:
+                if letter in self.word and word_letter_count[letter] > 0:
+                    misplaced_letters.append((letter, i))
+                    word_letter_count[letter] -= 1
+                else:
+                    wrong_letters.append((letter, i))
+
         return correct_letters, misplaced_letters, wrong_letters
 
     def show_feedback(self, guess, correct_letters, misplaced_letters, wrong_letters):
-        # Display the guessed word with colors
         guess_frame = tk.Frame(self.previous_guesses_frame)
         guess_frame.pack()
 
+        correct_positions = {pos for _, pos in correct_letters}
+        misplaced_positions = {pos for _, pos in misplaced_letters}
+
         for i, letter in enumerate(guess):
-            if letter in correct_letters:
+            if i in correct_positions:
                 bg_color = "green"
-            elif letter in misplaced_letters:
+            elif i in misplaced_positions:
                 bg_color = "yellow"
             else:
                 bg_color = "grey"
@@ -110,25 +132,28 @@ class WyrdlGame(tk.Tk):
             label = tk.Label(guess_frame, text=letter, font=("Helvetica", 14), bg=bg_color, width=2)
             label.pack(side=tk.LEFT)
 
-        self.correct_listbox.delete(0, tk.END)
-        for letter in sorted(correct_letters):
-            self.correct_listbox.insert(tk.END, letter)
+        # Update the lists of correct and misplaced letters
+        self.correct_listbox.insert(tk.END, ", ".join(sorted(set(letter for letter, _ in correct_letters))))
+        self.misplaced_listbox.insert(tk.END, ", ".join(sorted(set(letter for letter, _ in misplaced_letters))))
 
-        self.misplaced_listbox.delete(0, tk.END)
-        for letter in sorted(misplaced_letters):
-            self.misplaced_listbox.insert(tk.END, letter)
-
-        for letter in correct_letters:
-            self.alphabet_labels[letter].config(bg="green")
-        for letter in misplaced_letters:
-            self.alphabet_labels[letter].config(bg="yellow")
-        for letter in wrong_letters:
-            self.alphabet_labels[letter].config(bg="grey")
+        # Update the alphabet labels
+        for letter in ascii_letters[:26]:
+            if letter.lower() in [l.lower() for l, _ in correct_letters]:
+                self.alphabet_labels[letter.lower()].config(bg="green")
+            elif letter.lower() in [l.lower() for l, _ in misplaced_letters]:
+                self.alphabet_labels[letter.lower()].config(bg="yellow")
+            elif letter.lower() in [l.lower() for l, _ in wrong_letters]:
+                self.alphabet_labels[letter.lower()].config(bg="grey")
 
     def game_over(self):
-        messagebox.showinfo("Game Over", f"The word was {self.word}")
+        messagebox.showinfo("Game Over", f"The word was {self.word}.")
         self.quit()
 
+
 if __name__ == "__main__":
-    game = WyrdlGame("wordlist.txt")
-    game.mainloop()
+    wordlist_path = "wordlist.txt"  # Replace with your wordlist file
+    try:
+        game = WyrdlGame(wordlist_path)
+        game.mainloop()
+    except FileNotFoundError as e:
+        print(e)
