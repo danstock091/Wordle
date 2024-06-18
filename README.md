@@ -5,3 +5,7 @@
 
 #Quelle
 # https://realpython.com/python-wordle-clone/#conclusion
+
+Idee:
+--
+Wir wollten ein Programm schreiben, mit dem wir ein Wörter-Raten-Spiel realisieren wollen. 
